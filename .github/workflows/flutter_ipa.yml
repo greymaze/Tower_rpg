@@ -1,51 +1,91 @@
-name: Build iOS IPA for TestFlight
+name: Flutter iOS Build & Download Link
 
 on:
  push:
-   branches: [ main ]
+   branches:
+     - main
+ pull_request:
 
 jobs:
- build_ios:
+ build-ios:
    runs-on: macos-latest
 
    steps:
-   - uses: actions/checkout@v3
+   # 1️⃣ Cloner le repo
+   - name: Checkout repository
+     uses: actions/checkout@v3
 
-   - name: Set up Flutter
+   # 2️⃣ Installer Flutter
+   - name: Setup Flutter
      uses: subosito/flutter-action@v2
      with:
-       flutter-version: '3.13.0'
+       flutter-version: '3.13.0' # Mets ta version exacte
 
-   - name: Install dependencies
+   # 3️⃣ Activer iOS si manquant
+   - name: Enable iOS platform
+     run: flutter create . --platforms=ios
+
+   # 4️⃣ Installer les dépendances Flutter
+   - name: Flutter pub get
      run: flutter pub get
 
-   - name: Decode iOS certificate and profile
+   # 5️⃣ Installer les Pods iOS
+   - name: Install CocoaPods
      run: |
-       mkdir -p ~/certs
-       echo ${{ secrets.IOS_CERT_BASE64 }} | base64 --decode > ~/certs/cert.p12
-       echo ${{ secrets.IOS_PROFILE_BASE64 }} | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+       cd ios
+       pod install
+       cd ..
 
-   - name: Setup keychain
+   # 6️⃣ Créer un ExportOptions.plist minimal
+   - name: Create ExportOptions.plist
      run: |
-       security create-keychain -p actions ios-build.keychain
-       security import ~/certs/cert.p12 -k ~/Library/Keychains/ios-build.keychain -P "${{ secrets.IOS_CERT_PASSWORD }}" -T /usr/bin/codesign
-       security list-keychains -s ~/Library/Keychains/ios-build.keychain
-       security default-keychain -s ~/Library/Keychains/ios-build.keychain
-       security unlock-keychain -p actions ~/Library/Keychains/ios-build.keychain
+       cat <<EOF > ios/ExportOptions.plist
+       <?xml version="1.0" encoding="UTF-8"?>
+       <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+       <plist version="1.0">
+       <dict>
+         <key>method</key>
+         <string>development</string>
+         <key>signingStyle</key>
+         <string>manual</string>
+         <key>compileBitcode</key>
+         <false/>
+         <key>destination</key>
+         <string>export</string>
+         <key>stripSwiftSymbols</key>
+         <true/>
+         <key>teamID</key>
+         <string>XXXXXXXXXX</string>
+       </dict>
+       </plist>
+       EOF
 
-   - name: Build IPA
-     run: flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+   # 7️⃣ Build iOS sans codesign
+   - name: Build iOS
+     run: flutter build ios --release --no-codesign
 
-   - name: Upload IPA artifact
-     uses: actions/upload-artifact@v3
+   # 8️⃣ Créer l’IPA
+   - name: Create .ipa
+     run: |
+       mkdir -p build/ios/ipa
+       xcodebuild -workspace ios/Runner.xcworkspace \
+                  -scheme Runner \
+                  -configuration Release \
+                  -archivePath build/ios/Runner.xcarchive archive
+       xcodebuild -exportArchive \
+                  -archivePath build/ios/Runner.xcarchive \
+                  -exportOptionsPlist ios/ExportOptions.plist \
+                  -exportPath build/ios/ipa
+
+   # 9️⃣ Uploader l’IPA
+   - name: Upload IPA
+     id: upload
+     uses: actions/upload-artifact@v4
      with:
-       name: tower_rpg_ios_ipa
-       path: build/ios/ipa/*.ipa
+       name: Runner-ipa
+       path: build/ios/ipa/Runner.ipa
+       overwrite: true
 
-   - name: Upload to TestFlight
-     uses: appleboy/app-store-release-action@v0.5.3
-     with:
-       api_key: ${{ secrets.APPLE_ID }}
-       api_issuer: ${{ secrets.APPLE_ISSUER_ID }}
-       app_specific_password: ${{ secrets.APP_SPECIFIC_PASSWORD }}
-       ipa_path: build/ios/ipa/*.ipa
+   # 🔟 Afficher le lien direct
+   - name: Display IPA download link
+     run: echo "Lien direct IPA : ${{ steps.upload.outputs.artifact-url }}"
