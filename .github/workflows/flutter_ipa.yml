@@ -1,0 +1,51 @@
+name: Build iOS IPA for TestFlight
+
+on:
+ push:
+   branches: [ main ]
+
+jobs:
+ build_ios:
+   runs-on: macos-latest
+
+   steps:
+   - uses: actions/checkout@v3
+
+   - name: Set up Flutter
+     uses: subosito/flutter-action@v2
+     with:
+       flutter-version: '3.13.0'
+
+   - name: Install dependencies
+     run: flutter pub get
+
+   - name: Decode iOS certificate and profile
+     run: |
+       mkdir -p ~/certs
+       echo ${{ secrets.IOS_CERT_BASE64 }} | base64 --decode > ~/certs/cert.p12
+       echo ${{ secrets.IOS_PROFILE_BASE64 }} | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+
+   - name: Setup keychain
+     run: |
+       security create-keychain -p actions ios-build.keychain
+       security import ~/certs/cert.p12 -k ~/Library/Keychains/ios-build.keychain -P "${{ secrets.IOS_CERT_PASSWORD }}" -T /usr/bin/codesign
+       security list-keychains -s ~/Library/Keychains/ios-build.keychain
+       security default-keychain -s ~/Library/Keychains/ios-build.keychain
+       security unlock-keychain -p actions ~/Library/Keychains/ios-build.keychain
+
+   - name: Build IPA
+     run: flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+
+   - name: Upload IPA artifact
+     uses: actions/upload-artifact@v3
+     with:
+       name: tower_rpg_ios_ipa
+       path: build/ios/ipa/*.ipa
+
+   - name: Upload to TestFlight
+     uses: appleboy/app-store-release-action@v0.5.3
+     with:
+       api_key: ${{ secrets.APPLE_ID }}
+       api_issuer: ${{ secrets.APPLE_ISSUER_ID }}
+       app_specific_password: ${{ secrets.APP_SPECIFIC_PASSWORD }}
+       ipa_path: build/ios/ipa/*.ipa
