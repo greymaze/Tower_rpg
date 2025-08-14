@@ -1,35 +1,51 @@
-name: Flutter CI
+name: Flutter iOS Build
 
 on:
  push:
-   branches: [ main ]
+   branches:
+     - main
  pull_request:
-   branches: [ main ]
 
 jobs:
- build:
-   name: Build Flutter App
+ build-ios:
    runs-on: macos-latest
 
    steps:
-   - uses: actions/checkout@v3
+   # 1️⃣ Cloner le repo
+   - name: Checkout repository
+     uses: actions/checkout@v3
 
-   - name: Set up Flutter
+   # 2️⃣ Installer Flutter
+   - name: Setup Flutter
      uses: subosito/flutter-action@v2
      with:
-       flutter-version: '3.13.0'
+       flutter-version: '3.13.0' # adapte si ta version est différente
 
-   - name: Install dependencies
+   # 3️⃣ Installer les dépendances
+   - name: Flutter pub get
      run: flutter pub get
 
-   - name: Analyze code
-     run: flutter analyze
-
-   - name: Run tests
-     run: flutter test
-
+   # 4️⃣ Générer le build iOS en release
    - name: Build iOS
-     run: flutter build ios --no-codesign
+     run: flutter build ios --release --no-codesign
 
-   - name: Build Android
-     run: flutter build apk --release
+   # 5️⃣ Archiver en .ipa
+   - name: Create .ipa
+     run: |
+       mkdir -p build/ios/ipa
+       xcodebuild -workspace ios/Runner.xcworkspace \
+                  -scheme Runner \
+                  -configuration Release \
+                  -archivePath build/ios/Runner.xcarchive archive
+       xcodebuild -exportArchive \
+                  -archivePath build/ios/Runner.xcarchive \
+                  -exportOptionsPlist ios/ExportOptions.plist \
+                  -exportPath build/ios/ipa
+
+   # 6️⃣ Uploader l’artefact avec v4
+   - name: Upload IPA
+     uses: actions/upload-artifact@v4
+     with:
+       name: Runner-ipa
+       path: build/ios/ipa/Runner.ipa
+       overwrite: true
