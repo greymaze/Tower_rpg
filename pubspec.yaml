@@ -21,6 +21,10 @@ flutter:
  uses-material-design: true
 
  assets:
-   - assets/sprites/
-   - assets/tiles/
-   - assets/icons/
+   - assets/sprites/player_male.png
+   - assets/sprites/player_female.png
+   - assets/sprites/monster_lezard.png
+   - assets/sprites/monster_gobelin.png
+   - assets/tiles/floor.png
+   - assets/tiles/wall.png
+   - assets/tiles/door.png 
