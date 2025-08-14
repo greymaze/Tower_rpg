@@ -1,4 +1,4 @@
-name: Flutter iOS Build
+name: Flutter Web Build
 
 on:
  push:
@@ -7,8 +7,8 @@ on:
  pull_request:
 
 jobs:
- build-ios:
-   runs-on: macos-latest
+ build-web:
+   runs-on: ubuntu-latest
 
    steps:
      - name: Checkout repository
@@ -19,65 +19,15 @@ jobs:
        with:
          flutter-version: '3.13.0'  # adapte si besoin
 
-     - name: Ensure iOS platform exists
-       run: flutter create . --platforms=ios
-
      - name: Flutter pub get
        run: flutter pub get
 
-     - name: Install CocoaPods
-       run: |
-         cd ios
-         pod install || true
-         cd ..
+     - name: Build Flutter Web
+       run: flutter build web --release
 
-     - name: Create ExportOptions.plist
-       run: |
-         cat > ios/ExportOptions.plist <<'EXPORT_PLIST'
-         <?xml version="1.0" encoding="UTF-8"?>
-         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-         <plist version="1.0">
-         <dict>
-           <key>method</key>
-           <string>development</string>
-           <key>signingStyle</key>
-           <string>manual</string>
-           <key>compileBitcode</key>
-           <false/>
-           <key>destination</key>
-           <string>export</string>
-           <key>stripSwiftSymbols</key>
-           <true/>
-           <!-- Remplace XXXXXXXXXX par ton Team ID si tu signes -->
-           <key>teamID</key>
-           <string>XXXXXXXXXX</string>
-         </dict>
-         </plist>
-         EXPORT_PLIST
-
-     - name: Build iOS (no codesign)
-       run: flutter build ios --release --no-codesign
-
-     - name: Archive with xcodebuild
-       run: |
-         set -e
-         xcodebuild -workspace ios/Runner.xcworkspace \
-                    -scheme Runner \
-                    -configuration Release \
-                    -archivePath build/ios/Runner.xcarchive archive
-
-     - name: Export IPA
-       run: |
-         set -e
-         mkdir -p build/ios/ipa
-         xcodebuild -exportArchive \
-                    -archivePath build/ios/Runner.xcarchive \
-                    -exportOptionsPlist ios/ExportOptions.plist \
-                    -exportPath build/ios/ipa
-
-     - name: Upload IPA artifact (v4)
+     - name: Upload Web artifact
        uses: actions/upload-artifact@v4
        with:
-         name: Runner-ipa
-         path: build/ios/ipa/Runner.ipa
+         name: web-build
+         path: build/web
          overwrite: true
